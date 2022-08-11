@@ -10,3 +10,7 @@ GoでAndroidのADBに接続するためのパッケージです．
 ## Usage
 
 cmds/shell が `adb shell` のような動作をするサンプルです．
+
+# License
+
+MIT License
