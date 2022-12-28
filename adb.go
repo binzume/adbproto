@@ -282,20 +282,20 @@ func (c *Conn) deleteStrem(id uint32) bool {
 	return false
 }
 
-func (c *Conn) Open(path string) (*Stream, error) {
+func (c *Conn) Open(dest string) (*Stream, error) {
 	s := c.newStream()
-	if err := c.Send(NewPacket(A_OPEN, s.local, 0, []byte(path))); err != nil {
+	if err := c.Send(NewPacket(A_OPEN, s.local, 0, []byte(dest))); err != nil {
 		c.deleteStrem(s.local)
 		return nil, err
 	}
 	select {
 	case <-c.done:
 		c.deleteStrem(s.local)
-		return nil, fmt.Errorf("Cannot open %s", path)
+		return nil, fmt.Errorf("Cannot open %s", dest)
 	case _, ok := <-s.Ch:
 		if !ok {
 			c.deleteStrem(s.local)
-			return nil, fmt.Errorf("Cannot open %s", path)
+			return nil, fmt.Errorf("Cannot open %s", dest)
 		}
 	}
 	return s, nil
