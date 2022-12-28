@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/binzume/adbproto"
 )
@@ -35,10 +36,14 @@ func loadRsaKey(keyPath string) (*rsa.PrivateKey, error) {
 
 func main() {
 	homeDir, _ := os.UserHomeDir()
-	adb := flag.String("adb", "localhost:5555", "adb device (host:port)")
-	adbKey := flag.String("adbkey", filepath.Join(homeDir, ".android/adbkey"), "RSA Private key file for ADB")
-	adbPath := flag.String("path", "shell:", "ADB stream path")
+	adb := flag.String("t", "localhost:5555", "adb device (host:port)")
+	adbKey := flag.String("k", filepath.Join(homeDir, ".android/adbkey"), "RSA Private key file for ADB")
 	flag.Parse()
+
+	dest := "shell:"
+	if flag.NArg() > 0 {
+		dest = flag.Arg(0) + ":" + strings.Join(flag.Args()[1:], " ")
+	}
 
 	key, err := loadRsaKey(*adbKey)
 	if err != nil {
@@ -57,9 +62,9 @@ func main() {
 	}
 	defer adbconn.Close()
 
-	stream, err := adbconn.Open(*adbPath)
+	stream, err := adbconn.Open(dest)
 	if err != nil {
-		log.Fatal("Failed to start ", *adbPath, err)
+		log.Fatal("Failed to start ", dest, err)
 	}
 	defer stream.Close()
 
