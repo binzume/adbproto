@@ -5,9 +5,13 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math/big"
+	"net"
 	"sync"
 
 	"golang.org/x/crypto/ssh"
@@ -23,6 +27,9 @@ const (
 	A_CLSE = 0x45534c43
 	A_WRTE = 0x45545257
 	A_STLS = 0x534C5453
+
+	A_STLS_VERSION_MIN = 0x01000000
+	A_STLS_VERSION     = 0x01000000
 )
 
 type PackerHeader struct {
@@ -102,12 +109,41 @@ type Conn struct {
 }
 
 func Connect(rw io.ReadWriter, key *rsa.PrivateKey) (*Conn, error) {
+
 	sendCh := make(chan *Packet, 16)
 	c := &Conn{streams: map[uint32]*Stream{}, c: rw, sendCh: sendCh, done: make(chan struct{})}
 	NewPacket(A_CNXN, 0x01000000, 256*1024, []byte("host::\x00")).WriteTo(c.c)
 	p, _ := c.readPacket()
 	if p.Command == A_STLS {
-		return nil, fmt.Errorf("TLS connection is not supported.")
+		NewPacket(A_STLS, A_STLS_VERSION, 0, nil).WriteTo(c.c)
+		if nc, ok := rw.(net.Conn); ok {
+			tmpl := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				KeyUsage:     x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+			}
+			der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+			if err != nil {
+				return nil, err
+			}
+			config := &tls.Config{
+				InsecureSkipVerify: true,
+				GetClientCertificate: func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					return &tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, nil
+				},
+			}
+			tlsconn := tls.Client(nc, config)
+			err = tlsconn.Handshake()
+			if err != nil {
+				return nil, err
+			}
+			c.c = tlsconn
+			p, err = c.readPacket()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, fmt.Errorf("TLS connection is not supported.")
+		}
 	}
 	if p.Command == A_AUTH {
 		if key == nil {
